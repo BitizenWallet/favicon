@@ -42,12 +42,12 @@ class Icon implements Comparable<Icon> {
 }
 
 class Favicon {
-  static Future<List<Icon>> getAll(String body, {List<String>? suffixes}) async {
+  static Future<List<Icon>> getAll(String url, String body, {List<String>? suffixes}) async {
     var favicons = <Icon>[];
     var iconUrls = <String>[];
 
     var uri = Uri.parse(url);
-    var document = parse(body);
+    var document = pars e(body);
 
     // Look for icons in tags
     for (var rel in ['icon', 'shortcut icon']) {
@@ -119,8 +119,8 @@ class Favicon {
     return favicons..sort();
   }
 
-  static Future<Icon?> getBest(String body, {List<String>? suffixes}) async {
-    List<Icon> favicons = await getAll(body, suffixes: suffixes);
+  static Future<Icon?> getBest(String url, String body, {List<String>? suffixes}) async {
+    List<Icon> favicons = await getAll(url, body, suffixes: suffixes);
     return favicons.isNotEmpty ? favicons.first : null;
   }
 
