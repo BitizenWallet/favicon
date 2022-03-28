@@ -42,13 +42,18 @@ class Icon implements Comparable<Icon> {
 }
 
 class Favicon {
-  static Future<List<Icon>> getAll(String url, String body,
-      {List<String>? suffixes}) async {
+  static Future<List<Icon>> getAll(String url,
+      {String? body, List<String>? suffixes}) async {
+    Map<Uri, http.Response?> cache = {};
     var favicons = <Icon>[];
     var iconUrls = <String>[];
 
     var uri = Uri.parse(url);
-    var document = parse(body);
+    if (body == null) {
+      final resp = await httpGetWithCache(uri, cache);
+      body = resp?.body;
+    }
+    var document = parse(body!);
 
     // Look for icons in tags
     for (var rel in ['icon', 'shortcut icon']) {
@@ -75,7 +80,7 @@ class Favicon {
           iconUrl = iconUrl.split('?').first;
 
           // Verify so the icon actually exists
-          if (await _verifyImage(iconUrl)) {
+          if (await _verifyImage(iconUrl, cache)) {
             iconUrls.add(iconUrl);
           }
         }
@@ -84,7 +89,7 @@ class Favicon {
 
     // Look for icon by predefined URL
     var iconUrl = uri.scheme + '://' + uri.host + '/favicon.ico';
-    if (await _verifyImage(iconUrl)) {
+    if (await _verifyImage(iconUrl, cache)) {
       iconUrls.add(iconUrl);
     }
 
@@ -111,23 +116,31 @@ class Favicon {
         continue;
       }
 
-      var image = decodeImage((await http.get(Uri.parse(iconUrl))).bodyBytes);
-      if (image != null) {
-        favicons.add(Icon(iconUrl, width: image.width, height: image.height));
+      final resp = await httpGetWithCache(Uri.parse(iconUrl), cache);
+
+      if (resp != null) {
+        var image = decodeImage(resp.bodyBytes);
+        if (image != null) {
+          favicons.add(Icon(iconUrl, width: image.width, height: image.height));
+        }
       }
     }
 
     return favicons..sort();
   }
 
-  static Future<Icon?> getBest(String url, String body,
-      {List<String>? suffixes}) async {
-    List<Icon> favicons = await getAll(url, body, suffixes: suffixes);
+  static Future<Icon?> getBest(String url,
+      {String? body, List<String>? suffixes}) async {
+    List<Icon> favicons = await getAll(url, suffixes: suffixes, body: body);
     return favicons.isNotEmpty ? favicons.first : null;
   }
 
-  static Future<bool> _verifyImage(String url) async {
-    var response = await http.get(Uri.parse(url));
+  static Future<bool> _verifyImage(
+      String url, Map<Uri, http.Response?> cache) async {
+    var response = await httpGetWithCache(Uri.parse(url), cache);
+    if (response == null) {
+      return false;
+    }
 
     var contentType = response.headers['content-type'];
     if (contentType == null || !contentType.contains('image')) return false;
@@ -154,5 +167,18 @@ class Favicon {
       if (fileSignature[i] != signature[i]) return false;
     }
     return true;
+  }
+
+  static Future<http.Response?> httpGetWithCache(
+      Uri uri, Map<Uri, http.Response?> cache) async {
+    if (!cache.containsKey(uri)) {
+      try {
+        final resp = await http.get(uri);
+        cache[uri] = resp;
+      } catch (e) {
+        cache[uri] = null;
+      }
+    }
+    return cache[uri];
   }
 }
